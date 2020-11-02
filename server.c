@@ -3,7 +3,7 @@
 User userList[NUMUSERS]= {{'*',"Pablo",		0,0,0,0,0},
                           {'*',"Isma",		0,0,0,0,0},
                           {'<',"Alexis",	0,0,0,0,0},
-                          {'<',"Humberto",	0,0,0,0,0},
+                          {'<',"Humberto",0,0,0,0,0},
                           {'<',"Laura",		0,0,0,0,0},
                           {'X',"Juan",		0,0,0,0,0},
                           {'X',"Robert",	0,0,0,0,0},
@@ -54,4 +54,18 @@ int main()
     close(serverFd);
     //printf("fd in main: %d\n", serverFd);
     return 0;
+  
+  
+  
+  int fds,fdc=-1;
+  system("mkfifo fifoServidor");
+  fds=open("fifoServidor",O_RDONLY);
+  if(fds==-1)
+    {
+     perror("Error: No se pudo abrir el servicio de lectura para el FIFO del Servidor");
+     exit(1);
+    }
+
+  read(fds,&userResp,sizeof(User));
+  printf("Hola: %s",userResp.name);
 }
