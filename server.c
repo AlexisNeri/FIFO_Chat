@@ -33,6 +33,7 @@ void ReadData()
 
 int main()
 {
+  User userResp;
     bool keepAwake = TRUE;
 
 
