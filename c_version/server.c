@@ -1,71 +1,205 @@
 #include "chat.h"
-
-User userList[NUMUSERS]= {{'*',"Pablo",		0,0,0,0,0},
-                          {'*',"Isma",		0,0,0,0,0},
-                          {'<',"Alexis",	0,0,0,0,0},
-                          {'<',"Humberto",0,0,0,0,0},
-                          {'<',"Laura",		0,0,0,0,0},
-                          {'X',"Juan",		0,0,0,0,0},
-                          {'X',"Robert",	0,0,0,0,0},
-                          {'X',"Zaira",		0,0,0,0,0},
-                          {'<',"Arturo",	0,0,0,0,0},
-                          {'<',"David",		0,0,0,0,0}};
+User userList[NUMUSERS];
 int usersConnected = 0;
+bool keepAwake = TRUE;
 
 int serverFd;
-void Connect();
+void Connect(User * client);
 void UpdateUsers(User userList[NUMUSERS]);
+void Chat(User * client);
+void Login(User * user);
+void RemoveUser(User *user);
 
-void ListUsers()
+void InitUsers()
 {
-     /*while(i<maxusers)
-        if(arreglo[i].status != 'X')
-            print user ("Isma *")
-            */
+	for(int index = 0; index < NUMUSERS; index++)
+	{
+		userList[index].status		= EMPTYSTATUS;
+		userList[index].id			= init;
+		userList[index].destId		= init;
+		userList[index].action		= init;
+	}
 }
 
+void UpdateStatus(User * client)
+{
+    printf("Status updated.\n");
+	/*Update status in client list*/
+	userList[client -> id].status = client -> status;
+}
 
+void ListUsers(User * client)
+{
+    printf("List users called.\n");
+    char line[SIZELIST]= {"ID  Name\tStatus\n"};
+    char currentLine[BUFFERSIZE];
+    for(int i = 0; i < NUMUSERS; i++)
+    {
+		/*List valid users only*/
+        if(userList[i].status != EMPTYSTATUS)
+        {
+            snprintf(currentLine, sizeof(currentLine),"%i   %s\t%c\n",i,userList[i].name,userList[i].status);
+            strcat(line, currentLine);
+        }
+    }
+	/*Write data to client*/
+    int clientFd = open(client -> myFifo, O_WRONLY);
+    write(clientFd, line, SIZELIST);
+    close(clientFd);
+}
+
+void Login(User * user)
+{
+    printf("Login called.\n");
+    int clientFifo = open(user -> myFifo, O_WRONLY);
+	/*Verify the number of clients connected*/
+    if(usersConnected < NUMUSERS)
+    {
+        /*Look for an empty position in the array*/
+        for(int i = 0; i < NUMUSERS; i++)
+        {
+            if(EMPTYSTATUS == userList[i].status)
+            {
+                user -> action = acceptConnection;
+                user -> id = i;
+                userList[i] = *user;
+                /*Update users list*/
+                usersConnected++;
+                write(clientFifo, user, sizeof(User));
+                i = NUMUSERS;
+            }
+        }
+    }
+    else
+    {
+        /*Error notification to the client*/
+        user -> action = rejectConnection;
+        write(clientFifo, user, sizeof(User));
+    }
+    close(clientFifo);
+}
+
+void RemoveUser(User *user)
+{
+    printf("User exit called.\n");
+    /*Removing user*/
+    userList[user -> id].status = EMPTYSTATUS;
+    usersConnected--;
+	/*En program when no users are connected*/
+    if(init == usersConnected)
+    {
+        keepAwake = FALSE;
+    }
+}
+
+void Chat(User * source)
+{
+    printf("Chat service called.\n");
+	/*Send data to destination client*/
+    int destFd = open(userList[source -> destId].myFifo, O_WRONLY);
+    write(destFd, source, sizeof(User));
+    close(destFd);
+}
+
+void Connect(User * source)
+{
+	/*Connection request made by any client*/
+    printf("Connection attempt called.\n");
+    int destFd;
+    char response[BUFFERSIZE];
+	/*Check valid conditions in order to connect*/
+    if((source -> id != source -> destId) && (AVAILABLE == userList[source -> destId].status))
+    {
+        source -> action = connection;
+        destFd = open(userList[source -> destId].myFifo, O_WRONLY);
+        write(destFd, source, sizeof(User));
+        close(destFd);
+    }
+    /*Invalid or unavailable user*/
+    else
+    {
+        source -> action = invalidClient;
+        snprintf(source -> chatBuffer, BUFFERSIZE,"El usuario %d no se encuentra disponible o no existe.\n", source -> destId);
+        destFd = open(source -> myFifo, O_WRONLY);
+        write(destFd, source, sizeof(User));
+        close(destFd);
+    }
+}
+
+void AnswerConnection(User *source)
+{
+    printf("Connection answered.\n");
+    /*Update values in user table*/
+	if(acceptConnection == source -> action)
+	{
+		userList[source -> id].status		= UNAVAILABLE;
+		userList[source -> destId].status	= UNAVAILABLE;
+	}
+    int destFd = open(source -> destFifo, O_WRONLY);
+    write(destFd, source, sizeof(User));
+    close(destFd);
+}
 void ReadData()
 {
-     //serverFd= open("fifo_server",O_RDONLY);
-     //printf("fd in RD: %d\n", serverFd);
+	/*Monitor requests by clients*/
+    User tempUser;
+    serverFd= open(SERVERFIFO,O_RDONLY);
+    read(serverFd,&tempUser,sizeof(User));
+    close(serverFd);
+    switch(tempUser.action)
+    {
+        case login:
+        {
+            Login(&tempUser);
+            break;
+        }
+        case disconnect:
+        {
+            RemoveUser(&tempUser);
+            break;
+        }
+        case list:
+        {
+            ListUsers(&tempUser);
+            break;
+        }
+        case connection:
+        {
+            Connect(&tempUser);
+            break;
+        }
+        case chat:
+        {
+            Chat(&tempUser);
+            break;
+        }
+        case acceptConnection:
+        case rejectConnection:
+        {
+            AnswerConnection(&tempUser);
+            break;
+        }
+        case updateStatus:
+        {
+            UpdateStatus(&tempUser);
+            break;
+        }
+        default:
+		{
+            break;
+		}
+    }
 }
 
 int main()
 {
-  User userResp;
-    bool keepAwake = TRUE;
-
-
-    char input[BUFFERSIZE];
+    printf("Server running\n");
+	InitUsers();
     mkfifo(SERVERFIFO, 0666);
-    /*while(usersConnected > 0 || keepAwake == TRUE)
+    while(usersConnected > 0 || keepAwake == TRUE)
     {
-        serverFd= open(SERVERFIFO,O_RDONLY);
-        read(serverFd,input,sizeof(input));
-        if(EXIT == input)
-        {
-            keepAwake = FALSE;
-        }
-        printf("%s\n",input);
-    }*/
-    ListUsers();
-    printf("Server down\n");
-    close(serverFd);
-    //printf("fd in main: %d\n", serverFd);
-    return 0;
-  
-  
-  
-  int fds,fdc=-1;
-  system("mkfifo fifoServidor");
-  fds=open("fifoServidor",O_RDONLY);
-  if(fds==-1)
-    {
-     perror("Error: No se pudo abrir el servicio de lectura para el FIFO del Servidor");
-     exit(1);
+        ReadData();
     }
-
-  read(fds,&userResp,sizeof(User));
-  printf("Hola: %s",userResp.name);
+    printf("Server down\n");
+    return 0;
 }

@@ -5,11 +5,13 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <sys/stat.h>
+#include <sys/signal.h>
 #include <sys/types.h>
 
+#define SIZELIST        300
 #define NUMUSERS        10
 #define NAMESIZE        10
-#define BUFFERSIZE      50
+#define BUFFERSIZE      100
 #define CHILDPROCESS    0
 #define TRUE            1
 #define FALSE           0
@@ -20,29 +22,37 @@
 #define UNAVAILABLE     '<'
 #define TOKEN           '-'
 #define EMPTYSTATUS     'X'
+#define NULLSTRING      '\0'
+#define ACCEPT          0
+#define REJECT          1
 
 typedef enum Options
 {
     init = 0,
     list ,
-    connect,
+    connection,
     disconnect,
+    waitConnection,
     exitProgram,
+    chat,
     success,
     error,
     login,
     acceptConnection,
     rejectConnection,
+    invalidClient,
+    updateStatus,
 }Options;
 
 typedef struct User
 {
-    unsigned char status;
+    char status;
     unsigned char name[NAMESIZE];
-    unsigned char myFifo[20];
-    unsigned char destFifo[20];
+    unsigned char myFifo[NAMESIZE];
+    unsigned char destFifo[NAMESIZE];
     unsigned char chatBuffer[BUFFERSIZE];
     unsigned int id;
+    unsigned int destId;
     Options  action;
 }User;
 
