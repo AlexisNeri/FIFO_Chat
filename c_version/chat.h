@@ -7,6 +7,9 @@
 #include <sys/stat.h>
 #include <sys/signal.h>
 #include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/mman.h>
 
 #define SIZELIST        300
 #define NUMUSERS        10
@@ -25,6 +28,7 @@
 #define NULLSTRING      '\0'
 #define ACCEPT          0
 #define REJECT          1
+#define KEY             123
 
 typedef enum Options
 {
