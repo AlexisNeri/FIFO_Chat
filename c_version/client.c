@@ -148,10 +148,15 @@ void AttendRequest()
 void Chat()
 {
     printf("Chat started.\n");
+    client.status = UNAVAILABLE;
 	pid_t ChildPid = -1;
     bool keepChat = TRUE;
     /*Create child process for real time chat*/
     ChildPid = fork();
+    int myFifo;
+    char* sharedMemory = mmap(NULL, 1,
+                             PROT_READ | PROT_WRITE,
+                             MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     /*Child process reads from server*/
     if(CHILDPROCESS == ChildPid)
     {
@@ -160,41 +165,57 @@ void Chat()
         User tempUser;
         while(keepChat)
         {
-            int myFifo = open(client.myFifo,O_RDWR);
-            read(myFifo,&tempUser,sizeof(User));
-            printf("%s\n",tempUser.chatBuffer);
+			/*Chat is still active*/
+            if(AVAILABLE != client.status)
+            {
+                myFifo = open(client.myFifo,O_RDWR);
+                read(myFifo,&tempUser,sizeof(User));
+                close(myFifo);
+                printf("%s\n",tempUser.chatBuffer);
+            }
             if (FALSE == strcmp(tempUser.chatBuffer, EXIT))
             {
                 printf("Chat terminated, press exit to return to server.\n");
                 keepChat = FALSE;
+                client.status = AVAILABLE;
+				/*Communicate upon exit*/
+                myFifo = open(client.myFifo,O_WRONLY);
+                write(myFifo, &client.status, sizeof(client.status));
                 close(myFifo);
+                exit(CHILDPROCESS);
             }
         }
-        //printf("Child process ended by server.\n");
-        exit(CHILDPROCESS);
     }
-    /*Parent process writes server*/
+    /*Parent process writes to server*/
     else if (ChildPid >0)
     {
         char output[BUFFERSIZE];
         User tempUser;
         bool keepChat           = TRUE;
         client.action           = chat;
+        int myFifo;
+        char status = UNAVAILABLE;
 
         while(keepChat)
         {
-            serverFd = open(SERVERFIFO, O_RDWR);
             scanf("%s",client.chatBuffer);
-            //fgets(client.chatBuffer, BUFFERSIZE, stdin);
-            write(serverFd, &client, sizeof(User));
+			/*Write to file only if chat is active on both clients*/
+            if(AVAILABLE != client.status)
+            {
+                serverFd = open(SERVERFIFO, O_RDWR);
+                write(serverFd, &client, sizeof(User));
+                close(serverFd);
+            }
             if (FALSE == strcmp(client.chatBuffer, EXIT))
             {
+				myFifo = open(client.myFifo,O_RDONLY);
+				read(myFifo,&status,sizeof(status));
+				close(myFifo);
                 printf("Chat terminated.\n");
                 keepChat = FALSE;
-                close(serverFd);
-                kill(ChildPid, SIGTERM);
+                client.status = AVAILABLE;
+                kill(ChildPid, SIGKILL);
             }
-
         }
     }
     else
